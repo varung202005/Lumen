@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, FileText, Image as ImageIcon, Braces, Package, Sparkles, Download } from "lucide-react";
+import { ArrowLeft, FileText, Image as ImageIcon, Braces, Package, Sparkles, Download, FlaskConical, AlertTriangle } from "lucide-react";
 import { getRun } from "@/data/runs";
 import { getExperiment } from "@/data/experiments";
 import { getDataset } from "@/data/datasets";
@@ -8,6 +8,7 @@ import { MetricCard } from "@/components/ui/Card";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { MetricLineChart } from "@/components/charts/Charts";
 import { cn, formatBytes, formatDuration, formatRelativeTime } from "@/lib/utils";
+import { api, type ApiRun } from "@/lib/api";
 
 const tabs = ["Metrics", "Parameters", "Artifacts", "Model & Dataset", "AI Analysis"] as const;
 type Tab = typeof tabs[number];
@@ -20,12 +21,120 @@ const artifactIcons: Record<string, any> = {
   other: FileText,
 };
 
+function RealRunDetail({ run }: { run: ApiRun }) {
+  return (
+    <div className="fade-in flex flex-col gap-6">
+      <div>
+        <Link to={`/experiments/${run.experimentId}`} className="flex items-center gap-1.5 text-[12px] font-medium text-text-muted hover:text-text">
+          <ArrowLeft size={13} /> Experiment
+        </Link>
+        <div className="mt-3 flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-[20px] font-bold text-text">{run.id}</h1>
+              <Badge tone="track"><FlaskConical size={11} /> real</Badge>
+              {run.status === "completed" && <Badge tone="success">completed</Badge>}
+              {run.status === "failed" && <Badge tone="danger">failed</Badge>}
+              {run.status === "running" && <Badge tone="track">running</Badge>}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-text-faint">
+              <span className="mono">{run.modelType}</span>
+              <span>·</span>
+              <span>Dataset <Link to={`/datasets/${run.datasetId}`} className="text-text-muted hover:text-lumen">{run.datasetId}</Link></span>
+              <span>·</span>
+              <span>Duration {run.durationSec != null ? `${run.durationSec}s` : "—"}</span>
+              <span>·</span>
+              <span>Created {formatRelativeTime(run.createdAt)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {run.status === "failed" && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-[#3d1a1d] bg-[#2a1214] px-4 py-3.5 text-[12.5px] text-danger">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <div>
+            <div className="font-semibold">Training failed</div>
+            <div className="mt-1 font-mono text-[11.5px]">{run.error}</div>
+          </div>
+        </div>
+      )}
+
+      {run.metrics && (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <MetricCard label="Accuracy" value={`${(run.metrics.accuracy * 100).toFixed(1)}%`} />
+            <MetricCard label="Precision" value={`${(run.metrics.precision * 100).toFixed(1)}%`} />
+            <MetricCard label="Recall" value={`${(run.metrics.recall * 100).toFixed(1)}%`} />
+            <MetricCard label="F1" value={run.metrics.f1} tone="lumen" />
+            <MetricCard label="Train Time" value={`${run.metrics.trainingTimeSec}s`} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-border bg-surface p-5">
+              <h3 className="mb-3 text-[12.5px] font-semibold text-text">Confusion Matrix</h3>
+              <table className="border-collapse text-[12px]">
+                <thead>
+                  <tr>
+                    <td />
+                    {run.metrics.classNames.map((c) => <th key={c} className="px-3 py-1.5 text-center text-[11px] text-text-faint">pred {c}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {run.metrics.confusionMatrix.map((row, i) => (
+                    <tr key={i}>
+                      <th className="px-3 py-1.5 text-right text-[11px] text-text-faint">actual {run.metrics!.classNames[i]}</th>
+                      {row.map((v, j) => (
+                        <td key={j} className={cn("border border-border-soft px-3 py-1.5 text-center font-mono", i === j ? "bg-[#0d2419] text-success" : "text-text-muted")}>{v}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded-xl border border-border bg-surface p-5">
+              <h3 className="mb-3 text-[12.5px] font-semibold text-text">Training Details</h3>
+              <div className="flex flex-col gap-2 text-[12.5px]">
+                <div className="flex justify-between border-b border-border-soft pb-2"><span className="text-text-muted">Model type</span><span className="font-mono text-text">{run.modelType}</span></div>
+                <div className="flex justify-between border-b border-border-soft pb-2"><span className="text-text-muted">Train rows</span><span className="font-mono text-text">{run.metrics.trainRows}</span></div>
+                <div className="flex justify-between border-b border-border-soft pb-2"><span className="text-text-muted">Test rows</span><span className="font-mono text-text">{run.metrics.testRows}</span></div>
+                <div className="flex justify-between border-b border-border-soft pb-2"><span className="text-text-muted">Feature count</span><span className="font-mono text-text">{run.metrics.featureCount}</span></div>
+                {Object.entries(run.params).map(([k, v]) => (
+                  <div key={k} className="flex justify-between border-b border-border-soft pb-2 last:border-0"><span className="text-text-muted">{k}</span><span className="font-mono text-text">{String(v)}</span></div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function RunDetail() {
   const { id } = useParams();
   const run = id ? getRun(id) : undefined;
   const [tab, setTab] = useState<Tab>("Metrics");
+  const [realRun, setRealRun] = useState<ApiRun | null>(null);
+  const [loadingReal, setLoadingReal] = useState(false);
+  const [realError, setRealError] = useState<string | null>(null);
 
-  if (!run) return <div className="text-[13px] text-text-muted">Run not found.</div>;
+  useEffect(() => {
+    if (run || !id) return;
+    setLoadingReal(true);
+    api
+      .getRun(id)
+      .then(setRealRun)
+      .catch((e) => setRealError(e instanceof Error ? e.message : "Failed to load run"))
+      .finally(() => setLoadingReal(false));
+  }, [id, run]);
+
+  if (!run) {
+    if (loadingReal) return <div className="text-[13px] text-text-muted">Loading run…</div>;
+    if (realRun) return <RealRunDetail run={realRun} />;
+    if (realError) return <div className="text-[13px] text-danger">{realError}</div>;
+    return <div className="text-[13px] text-text-muted">Run not found.</div>;
+  }
   const experiment = getExperiment(run.experimentId);
   const dataset = getDataset(run.datasetId);
 

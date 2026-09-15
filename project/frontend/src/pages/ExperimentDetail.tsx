@@ -1,12 +1,79 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Sparkles, GitCompare, MoreHorizontal, Lightbulb } from "lucide-react";
+import { ArrowLeft, Sparkles, GitCompare, MoreHorizontal, Lightbulb, FlaskConical } from "lucide-react";
 import { getExperiment } from "@/data/experiments";
 import { getRunsForExperiment } from "@/data/runs";
 import { MetricCard } from "@/components/ui/Card";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { MultiRunLineChart } from "@/components/charts/Charts";
 import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
+import { api, type ApiExperiment } from "@/lib/api";
+
+function RealExperimentDetail({ experiment }: { experiment: ApiExperiment }) {
+  const completed = experiment.runs.filter((r) => r.status === "completed");
+  const bestRun = completed.reduce<typeof completed[number] | null>((best, r) => (!best || (r.metrics?.f1 ?? 0) > (best.metrics?.f1 ?? 0) ? r : best), null);
+
+  return (
+    <div className="fade-in flex flex-col gap-6">
+      <div>
+        <Link to="/experiments" className="flex items-center gap-1.5 text-[12px] font-medium text-text-muted hover:text-text">
+          <ArrowLeft size={13} /> Experiments
+        </Link>
+        <div className="mt-3 flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-[20px] font-bold text-text">{experiment.name}</h1>
+              <Badge tone="track"><FlaskConical size={11} /> real</Badge>
+            </div>
+            <p className="mt-1.5 text-[13px] text-text-muted">Predicting <span className="font-mono text-text">{experiment.targetColumn}</span> · dataset <Link to={`/datasets/${experiment.datasetId}`} className="text-lumen hover:underline">{experiment.datasetId}</Link></p>
+          </div>
+          <Link to={`/experiments/new?datasetId=${experiment.datasetId}`} className="flex items-center gap-1.5 rounded-lg bg-lumen px-3.5 py-2 text-[12.5px] font-semibold text-bg transition-opacity hover:opacity-90">
+            <FlaskConical size={14} /> New Run
+          </Link>
+        </div>
+      </div>
+
+      {bestRun?.metrics && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <MetricCard label="Best Accuracy" value={`${(bestRun.metrics.accuracy * 100).toFixed(1)}%`} />
+          <MetricCard label="Best F1" value={bestRun.metrics.f1} tone="lumen" />
+          <MetricCard label="Runs" value={experiment.runs.length} />
+          <MetricCard label="Best Model" value={bestRun.modelType} />
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-xl border border-border bg-surface">
+        <div className="flex items-center justify-between border-b border-border-soft px-5 py-3.5">
+          <h3 className="text-[13px] font-semibold text-text">Runs</h3>
+        </div>
+        <table className="w-full text-left text-[12.5px]">
+          <thead>
+            <tr className="border-b border-border-soft text-[11px] uppercase tracking-wide text-text-faint">
+              <th className="px-4 py-2 font-medium">Run</th>
+              <th className="px-2 py-2 font-medium">Model</th>
+              <th className="px-2 py-2 font-medium">Status</th>
+              <th className="px-2 py-2 font-medium">Accuracy</th>
+              <th className="px-2 py-2 font-medium">F1</th>
+              <th className="px-4 py-2 font-medium">Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {experiment.runs.map((r) => (
+              <tr key={r.id} className="border-b border-border-soft transition-colors last:border-0 hover:bg-surface-hover">
+                <td className="px-4 py-2.5"><Link to={`/runs/${r.id}`} className="font-medium text-text hover:text-lumen">{r.id}</Link></td>
+                <td className="px-2 py-2.5 text-text-muted">{r.modelType}</td>
+                <td className="px-2 py-2.5">{r.status === "completed" ? <Badge tone="success">completed</Badge> : r.status === "failed" ? <Badge tone="danger">failed</Badge> : <Badge tone="track">running</Badge>}</td>
+                <td className="px-2 py-2.5 font-mono text-text-muted">{r.metrics ? `${(r.metrics.accuracy * 100).toFixed(1)}%` : "—"}</td>
+                <td className="px-2 py-2.5 font-mono text-text-muted">{r.metrics?.f1 ?? "—"}</td>
+                <td className="px-4 py-2.5 text-text-faint">{formatRelativeTime(r.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default function ExperimentDetail() {
   const { id } = useParams();
@@ -14,8 +81,24 @@ export default function ExperimentDetail() {
   const experiment = id ? getExperiment(id) : undefined;
   const runs = useMemo(() => (id ? getRunsForExperiment(id) : []), [id]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [realExperiment, setRealExperiment] = useState<ApiExperiment | null>(null);
+  const [loadingReal, setLoadingReal] = useState(false);
+  const [realError, setRealError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (experiment || !id) return;
+    setLoadingReal(true);
+    api
+      .getExperiment(id)
+      .then(setRealExperiment)
+      .catch((e) => setRealError(e instanceof Error ? e.message : "Failed to load experiment"))
+      .finally(() => setLoadingReal(false));
+  }, [id, experiment]);
 
   if (!experiment) {
+    if (loadingReal) return <div className="text-[13px] text-text-muted">Loading experiment…</div>;
+    if (realExperiment) return <RealExperimentDetail experiment={realExperiment} />;
+    if (realError) return <div className="text-[13px] text-danger">{realError}</div>;
     return <div className="text-[13px] text-text-muted">Experiment not found.</div>;
   }
 

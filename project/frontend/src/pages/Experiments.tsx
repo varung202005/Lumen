@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Search, SlidersHorizontal, ArrowUpDown, Plus, LayoutGrid, List } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Search, SlidersHorizontal, ArrowUpDown, Plus, LayoutGrid, List, FlaskConical } from "lucide-react";
 import { experiments } from "@/data/experiments";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Status } from "@/types";
+import { api, type ApiExperiment } from "@/lib/api";
 
 type SortKey = "updated" | "runs" | "metric" | "name";
 
@@ -16,6 +17,12 @@ export default function Experiments() {
   const [status, setStatus] = useState<Status | "all">("all");
   const [sort, setSort] = useState<SortKey>("updated");
   const [view, setView] = useState<"cards" | "table">("cards");
+  const navigate = useNavigate();
+  const [realExperiments, setRealExperiments] = useState<ApiExperiment[]>([]);
+
+  useEffect(() => {
+    api.listExperiments().then(setRealExperiments).catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     let list = experiments.filter((e) =>
@@ -38,7 +45,7 @@ export default function Experiments() {
           <h1 className="text-[20px] font-bold text-text">Experiments</h1>
           <p className="mt-1 text-[13px] text-text-muted">{experiments.length} experiments across your workspace</p>
         </div>
-        <button className="flex items-center gap-1.5 rounded-lg bg-lumen px-3.5 py-2 text-[12.5px] font-semibold text-bg transition-opacity hover:opacity-90">
+        <button onClick={() => navigate("/experiments/new")} className="flex items-center gap-1.5 rounded-lg bg-lumen px-3.5 py-2 text-[12.5px] font-semibold text-bg transition-opacity hover:opacity-90">
           <Plus size={14} /> New Experiment
         </button>
       </div>
@@ -85,6 +92,43 @@ export default function Experiments() {
           <button onClick={() => setView("table")} className={cn("rounded-md p-1.5", view === "table" ? "bg-surface-2 text-text" : "text-text-faint")}><List size={14} /></button>
         </div>
       </div>
+
+      {realExperiments.length > 0 && (
+        <div className="flex flex-col gap-2.5">
+          <h2 className="text-[12px] font-semibold uppercase tracking-wide text-text-faint">Your Experiments (real training runs)</h2>
+          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+            {realExperiments.map((e) => {
+              const completed = e.runs.filter((r) => r.status === "completed");
+              const bestF1 = completed.length ? Math.max(...completed.map((r) => r.metrics?.f1 ?? 0)) : null;
+              return (
+                <Card key={e.id} hoverable className="p-5">
+                  <Link to={`/experiments/${e.id}`} className="flex flex-col gap-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-[14px] font-semibold leading-snug text-text">{e.name}</h3>
+                      <Badge tone="track"><FlaskConical size={11} /> real</Badge>
+                    </div>
+                    <p className="text-[12.5px] text-text-muted">Target column: <span className="font-mono text-text">{e.targetColumn}</span></p>
+                    <div className="mt-1 flex items-center justify-between border-t border-border-soft pt-3">
+                      <div>
+                        <div className="text-[10.5px] uppercase tracking-wide text-text-faint">Best F1</div>
+                        <div className="font-mono text-[15px] font-semibold text-text">{bestF1 ?? "—"}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10.5px] uppercase tracking-wide text-text-faint">Runs</div>
+                        <div className="font-mono text-[15px] font-semibold text-text">{e.runs.length}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10.5px] uppercase tracking-wide text-text-faint">Updated</div>
+                        <div className="text-[12px] text-text-muted">{formatRelativeTime(e.createdAt)}</div>
+                      </div>
+                    </div>
+                  </Link>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {view === "cards" ? (
         <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">

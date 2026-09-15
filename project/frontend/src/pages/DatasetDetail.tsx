@@ -1,20 +1,153 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Sparkles, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Sparkles, CheckCircle2, AlertTriangle, FlaskConical } from "lucide-react";
 import { getDataset } from "@/data/datasets";
 import { MetricCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { DistributionPie, FeatureBar } from "@/components/charts/Charts";
 import { cn, formatNumber, formatRelativeTime } from "@/lib/utils";
+import { api, type ApiDataset } from "@/lib/api";
 
 const tabs = ["Overview", "Profile", "Quality", "Drift", "Lineage"] as const;
 type Tab = typeof tabs[number];
+
+function RealDatasetDetail({ dataset }: { dataset: ApiDataset }) {
+  const [tab, setTab] = useState<"Overview" | "Profile" | "Quality">("Overview");
+  const p = dataset.profile;
+  const numericCols = p.columnProfiles.filter((c) => c.type === "numeric");
+  const highMissing = p.columnProfiles.filter((c) => c.missingPct > 5);
+
+  return (
+    <div className="fade-in flex flex-col gap-6">
+      <div>
+        <Link to="/datasets" className="flex items-center gap-1.5 text-[12px] font-medium text-text-muted hover:text-text">
+          <ArrowLeft size={13} /> Datasets
+        </Link>
+        <div className="mt-3 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="font-mono text-[20px] font-bold text-text">{dataset.name}</h1>
+            <p className="mt-1.5 text-[13px] text-text-muted">{dataset.filename} · Uploaded {formatRelativeTime(dataset.uploadedAt)}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge tone="success">ready</Badge>
+            <Link
+              to={`/experiments/new?datasetId=${dataset.id}`}
+              className="flex items-center gap-1.5 rounded-lg bg-lumen px-3.5 py-2 text-[12.5px] font-semibold text-bg transition-opacity hover:opacity-90"
+            >
+              <FlaskConical size={14} /> Train Model
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MetricCard label="Rows" value={formatNumber(dataset.rows)} />
+        <MetricCard label="Columns" value={dataset.columns} />
+        <MetricCard label="Duplicate Rows" value={p.duplicateRows} />
+        <MetricCard label="Size" value={`${(dataset.sizeBytes / 1024).toFixed(1)} KB`} tone="lumen" />
+      </div>
+
+      <div className="flex items-center gap-1 border-b border-border-soft">
+        {(["Overview", "Profile", "Quality"] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)} className={cn("relative px-3.5 py-2.5 text-[12.5px] font-medium transition-colors", tab === t ? "text-text" : "text-text-faint hover:text-text-muted")}>
+            {t}
+            {tab === t && <span className="absolute bottom-0 left-0 h-[2px] w-full bg-lumen" />}
+          </button>
+        ))}
+      </div>
+
+      {tab === "Overview" && (
+        <div className="rounded-xl border border-[#2e2410] bg-surface glow-lumen">
+          <div className="flex items-center gap-2 border-b border-border-soft px-5 py-3.5">
+            <Sparkles size={14} className="text-lumen" />
+            <h3 className="text-[13px] font-semibold text-text">Data Quality Observations</h3>
+          </div>
+          <div className="flex flex-col gap-2 px-5 py-4">
+            {p.observations.map((o, i) => (
+              <div key={i} className="flex items-center gap-2 text-[12.5px]">
+                {o.severity === "success" ? (
+                  <CheckCircle2 size={14} className="text-success" />
+                ) : (
+                  <AlertTriangle size={14} className={o.severity === "critical" ? "text-danger" : "text-warning"} />
+                )}
+                <span className="text-text-muted">{o.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "Profile" && (
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <h3 className="mb-4 text-[12.5px] font-semibold text-text">Column Profile</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[12.5px]">
+              <thead>
+                <tr className="border-b border-border-soft text-[11px] uppercase tracking-wide text-text-faint">
+                  <th className="px-2 py-2 font-medium">Column</th>
+                  <th className="px-2 py-2 font-medium">Type</th>
+                  <th className="px-2 py-2 font-medium">Missing</th>
+                  <th className="px-2 py-2 font-medium">Unique</th>
+                  <th className="px-2 py-2 font-medium">Mean</th>
+                  <th className="px-2 py-2 font-medium">Std</th>
+                  <th className="px-2 py-2 font-medium">Min</th>
+                  <th className="px-2 py-2 font-medium">Max</th>
+                </tr>
+              </thead>
+              <tbody>
+                {p.columnProfiles.map((c) => (
+                  <tr key={c.name} className="border-b border-border-soft last:border-0">
+                    <td className="px-2 py-2 font-mono text-text">{c.name}</td>
+                    <td className="px-2 py-2 text-text-muted">{c.type}</td>
+                    <td className="px-2 py-2 font-mono text-text-muted">{c.missing} ({c.missingPct}%)</td>
+                    <td className="px-2 py-2 font-mono text-text-muted">{c.unique}</td>
+                    <td className="px-2 py-2 font-mono text-text-muted">{c.mean ?? "—"}</td>
+                    <td className="px-2 py-2 font-mono text-text-muted">{c.std ?? "—"}</td>
+                    <td className="px-2 py-2 font-mono text-text-muted">{c.min ?? "—"}</td>
+                    <td className="px-2 py-2 font-mono text-text-muted">{c.max ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === "Quality" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <MetricCard label="Duplicate Rows" value={p.duplicateRows} />
+          <MetricCard label="Columns w/ High Missingness" value={highMissing.length} />
+          <MetricCard label="Numeric Columns" value={numericCols.length} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DatasetDetail() {
   const { id } = useParams();
   const dataset = id ? getDataset(id) : undefined;
   const [tab, setTab] = useState<Tab>("Overview");
-  if (!dataset) return <div className="text-[13px] text-text-muted">Dataset not found.</div>;
+  const [realDataset, setRealDataset] = useState<ApiDataset | null>(null);
+  const [loadingReal, setLoadingReal] = useState(false);
+  const [realError, setRealError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (dataset || !id) return;
+    setLoadingReal(true);
+    api
+      .getDataset(id)
+      .then(setRealDataset)
+      .catch((e) => setRealError(e instanceof Error ? e.message : "Failed to load dataset"))
+      .finally(() => setLoadingReal(false));
+  }, [id, dataset]);
+
+  if (!dataset) {
+    if (loadingReal) return <div className="text-[13px] text-text-muted">Loading dataset…</div>;
+    if (realDataset) return <RealDatasetDetail dataset={realDataset} />;
+    if (realError) return <div className="text-[13px] text-danger">{realError}</div>;
+    return <div className="text-[13px] text-text-muted">Dataset not found.</div>;
+  }
 
   const healthChecks = [
     { ok: dataset.healthScore > 70, label: `Class imbalance ${dataset.classDistribution.some(c => c.value < 15) ? "detected" : "not detected"}` },

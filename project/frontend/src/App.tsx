@@ -17,6 +17,7 @@ import Insights from "@/pages/Insights";
 import Prompts from "@/pages/Prompts";
 import PromptDetail from "@/pages/PromptDetail";
 import Settings from "@/pages/Settings";
+import NewExperiment from "@/pages/NewExperiment";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route path="/" element={<Overview />} />
           <Route path="/experiments" element={<Experiments />} />
+          <Route path="/experiments/new" element={<NewExperiment />} />
           <Route path="/experiments/:id" element={<ExperimentDetail />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:id" element={<RunDetail />} />

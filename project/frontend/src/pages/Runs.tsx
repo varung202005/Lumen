@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, GitCompare } from "lucide-react";
+import { Search, GitCompare, FlaskConical } from "lucide-react";
 import { runs } from "@/data/runs";
 import { getExperiment } from "@/data/experiments";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { cn, formatDuration, formatRelativeTime } from "@/lib/utils";
 import type { Status } from "@/types";
+import { api, type ApiRun } from "@/lib/api";
 
 const statusFilters: (Status | "all")[] = ["all", "running", "completed", "failed", "queued"];
 
@@ -14,6 +15,11 @@ export default function Runs() {
   const [status, setStatus] = useState<Status | "all">("all");
   const [selected, setSelected] = useState<string[]>([]);
   const navigate = useNavigate();
+  const [realRuns, setRealRuns] = useState<ApiRun[]>([]);
+
+  useEffect(() => {
+    api.listRuns().then(setRealRuns).catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     return runs
@@ -59,6 +65,40 @@ export default function Runs() {
           ))}
         </div>
       </div>
+
+      {realRuns.length > 0 && (
+        <div className="flex flex-col gap-2.5">
+          <h2 className="text-[12px] font-semibold uppercase tracking-wide text-text-faint">Your Training Runs (real)</h2>
+          <div className="overflow-hidden rounded-xl border border-border">
+            <table className="w-full text-left text-[12.5px]">
+              <thead>
+                <tr className="border-b border-border bg-surface-2 text-[11px] uppercase tracking-wide text-text-faint">
+                  <th className="px-4 py-2.5 font-medium">Run</th>
+                  <th className="px-2 py-2.5 font-medium">Dataset</th>
+                  <th className="px-2 py-2.5 font-medium">Model</th>
+                  <th className="px-2 py-2.5 font-medium">Status</th>
+                  <th className="px-2 py-2.5 font-medium">Accuracy</th>
+                  <th className="px-2 py-2.5 font-medium">F1</th>
+                  <th className="px-4 py-2.5 font-medium">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {realRuns.map((r) => (
+                  <tr key={r.id} className="border-b border-border-soft bg-surface transition-colors last:border-0 hover:bg-surface-hover">
+                    <td className="px-4 py-2.5"><Link to={`/runs/${r.id}`} className="flex items-center gap-1.5 font-medium text-text hover:text-lumen"><FlaskConical size={12} className="text-lumen" /> {r.id}</Link></td>
+                    <td className="px-2 py-2.5"><Link to={`/datasets/${r.datasetId}`} className="text-text-muted hover:text-text">{r.datasetId}</Link></td>
+                    <td className="px-2 py-2.5 text-text-muted">{r.modelType}</td>
+                    <td className="px-2 py-2.5">{r.status === "completed" ? <Badge tone="success">completed</Badge> : r.status === "failed" ? <Badge tone="danger">failed</Badge> : <Badge tone="track">running</Badge>}</td>
+                    <td className="px-2 py-2.5 font-mono text-text-muted">{r.metrics ? `${(r.metrics.accuracy * 100).toFixed(1)}%` : "—"}</td>
+                    <td className="px-2 py-2.5 font-mono text-text-muted">{r.metrics?.f1 ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-text-faint">{formatRelativeTime(r.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-left text-[12.5px]">
