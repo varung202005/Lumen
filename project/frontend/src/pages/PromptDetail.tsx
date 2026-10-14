@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { getPrompt } from "@/data/prompts";
+import { api, type ApiPrompt } from "@/lib/api";
 import { Badge } from "@/components/ui/Badge";
 import { MetricCard } from "@/components/ui/Card";
 import { cn, formatRelativeTime } from "@/lib/utils";
@@ -14,9 +14,15 @@ const statusTone: Record<string, "success" | "neutral" | "warning"> = {
 
 export default function PromptDetail() {
   const { id } = useParams();
-  const prompt = id ? getPrompt(id) : undefined;
+  const [prompt, setPrompt] = useState<ApiPrompt | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [versionIdx, setVersionIdx] = useState(0);
-  if (!prompt) return <div className="text-[13px] text-text-muted">Prompt not found.</div>;
+  useEffect(() => {
+    if (!id) return;
+    api.getPrompt(id).then(setPrompt).catch((cause) => setError(cause instanceof Error ? cause.message : "Failed to load prompt"));
+  }, [id]);
+  if (error) return <div className="text-[13px] text-danger">{error}</div>;
+  if (!prompt) return <div className="text-[13px] text-text-muted">Loading prompt…</div>;
   const version = prompt.versions[versionIdx];
 
   return (

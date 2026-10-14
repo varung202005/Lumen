@@ -1,7 +1,10 @@
 import json
 import os
+import re
 import time
 import traceback
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from typing import Optional
 
@@ -117,6 +120,22 @@ class CreateRunRequest(BaseModel):
     modelType: str
     params: dict = {}
     experimentName: Optional[str] = None
+
+
+class CreatePromptRequest(BaseModel):
+    name: str
+    description: str = ""
+    content: str
+
+
+class CopilotMessage(BaseModel):
+    role: str
+    content: str
+
+
+class CopilotRequest(BaseModel):
+    messages: list[CopilotMessage]
+    experimentId: Optional[str] = None
 
 
 def run_to_api(row: dict) -> dict:
@@ -257,6 +276,146 @@ def get_experiment(experiment_id: str):
     conn.close()
     e["runs"] = [run_to_api(db.row_to_dict(rr)) for rr in run_rows]
     return e
+
+
+# ---------------------------------------------------------------------------
+# Module 3: Prompt Management
+# ---------------------------------------------------------------------------
+
+def prompt_to_api(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "status": row["status"],
+        "owner": row["owner"],
+        "updatedAt": row["updated_at"],
+        "variables": json.loads(row["variables_json"]),
+        "versions": json.loads(row["versions_json"]),
+    }
+
+
+@app.get("/api/prompts")
+def list_prompts():
+    conn = db.get_conn()
+    rows = conn.execute("SELECT * FROM prompts ORDER BY updated_at DESC").fetchall()
+    conn.close()
+    return [prompt_to_api(db.row_to_dict(row)) for row in rows]
+
+
+@app.post("/api/prompts")
+def create_prompt(req: CreatePromptRequest):
+    name = req.name.strip()
+    content = req.content.strip()
+    if not name or not content:
+        raise HTTPException(400, "Prompt name and content are required")
+
+    variables = []
+    for match in re.finditer(r"{{\s*([\w.-]+)\s*}}", content):
+        if match.group(1) not in variables:
+            variables.append(match.group(1))
+
+    now = db.now_iso()
+    prompt_id = db.new_id("pr")
+    versions = [{"version": "v1", "content": content, "evalScore": 0, "updatedAt": now}]
+    conn = db.get_conn()
+    conn.execute(
+        "INSERT INTO prompts (id, name, description, status, owner, updated_at, variables_json, versions_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (prompt_id, name, req.description.strip() or "A custom prompt for Lumen's intelligence layer.", "draft", "Workspace user", now, json.dumps(variables), json.dumps(versions)),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM prompts WHERE id = ?", (prompt_id,)).fetchone()
+    conn.close()
+    return prompt_to_api(db.row_to_dict(row))
+
+
+@app.get("/api/prompts/{prompt_id}")
+def get_prompt(prompt_id: str):
+    conn = db.get_conn()
+    row = conn.execute("SELECT * FROM prompts WHERE id = ?", (prompt_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "Prompt not found")
+    return prompt_to_api(db.row_to_dict(row))
+
+
+# ---------------------------------------------------------------------------
+# Module 4: AI Experiment Copilot
+# ---------------------------------------------------------------------------
+
+def copilot_context(experiment_id: Optional[str]) -> str:
+    conn = db.get_conn()
+    if experiment_id:
+        experiment = conn.execute("SELECT * FROM experiments WHERE id = ?", (experiment_id,)).fetchone()
+        runs = conn.execute("SELECT * FROM runs WHERE experiment_id = ? ORDER BY created_at DESC LIMIT 20", (experiment_id,)).fetchall()
+    else:
+        experiment = None
+        runs = conn.execute("SELECT * FROM runs ORDER BY created_at DESC LIMIT 20").fetchall()
+    conn.close()
+
+    run_summaries = []
+    for row in runs:
+        run = db.row_to_dict(row)
+        run_summaries.append({
+            "id": run["id"],
+            "experimentId": run["experiment_id"],
+            "model": run["model_type"],
+            "status": run["status"],
+            "params": json.loads(run["params_json"]),
+            "metrics": json.loads(run["metrics_json"]) if run["metrics_json"] else None,
+            "error": run["error"],
+        })
+
+    return json.dumps({
+        "experiment": db.row_to_dict(experiment) if experiment else None,
+        "runs": run_summaries,
+    }, default=str)
+
+
+@app.post("/api/copilot")
+def ask_copilot(req: CopilotRequest):
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "GEMINI_API_KEY is not configured on the backend")
+    if not req.messages:
+        raise HTTPException(400, "At least one message is required")
+
+    model = os.getenv("LUMEN_GEMINI_MODEL", "gemini-3.8-flash")
+    instructions = (
+        "You are Lumen Copilot, an AI assistant for MLOps. Use only the supplied experiment context. "
+        "Be concise, explain metrics in plain language, distinguish observations from hypotheses, "
+        "and recommend concrete next steps. If the context is insufficient, say so.\n\n"
+        f"Experiment context:\n{copilot_context(req.experimentId)}"
+    )
+    payload = {
+        "systemInstruction": {"parts": [{"text": instructions}]},
+        "contents": [
+            {"role": "model" if message.role == "assistant" else "user", "parts": [{"text": message.content}]}
+            for message in req.messages[-12:]
+        ],
+        "generationConfig": {"temperature": 0.2},
+    }
+    request = Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=60) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise HTTPException(502, f"Gemini request failed: {detail[:300]}") from error
+    except URLError as error:
+        raise HTTPException(502, f"Could not reach Gemini: {error.reason}") from error
+
+    output = [part.get("text", "") for part in body.get("candidates", [{}])[0].get("content", {}).get("parts", [])]
+    text = "\n".join(part for part in output if part).strip()
+    if not text:
+        raise HTTPException(502, "The Gemini model returned no text")
+    return {"content": text, "model": model}
 
 
 @app.get("/api/health")

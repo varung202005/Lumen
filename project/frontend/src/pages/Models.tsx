@@ -74,6 +74,7 @@ export default function Models() {
           </tbody>
         </table>
       </div>
+      {filtered.length === 0 && <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-16 text-center text-[13px] text-text-muted">No models have been registered yet.</div>}
     </div>
   );
 }

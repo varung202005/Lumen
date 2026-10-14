@@ -57,9 +57,9 @@ export default function Settings() {
         <div className="rounded-xl border border-border bg-surface p-5">
           {section === "General" && (
             <div>
-              <TextField label="Full name" defaultValue="Varun Mehta" />
-              <TextField label="Email" defaultValue="varun.mehta@lumen.dev" />
-              <TextField label="Role" defaultValue="ML Engineer" />
+              <TextField label="Full name" defaultValue="" />
+              <TextField label="Email" defaultValue="" />
+              <TextField label="Role" defaultValue="" />
             </div>
           )}
           {section === "Appearance" && (
@@ -71,7 +71,7 @@ export default function Settings() {
           )}
           {section === "Workspace" && (
             <div>
-              <TextField label="Workspace name" defaultValue="Lumen — ML Platform Team" />
+              <TextField label="Workspace name" defaultValue="" />
               <Toggle label="Auto-archive stale experiments" description="Archive experiments with no runs for 90+ days" defaultOn />
               <Toggle label="Require review before Production promotion" description="Model stage changes to Production need a second approver" defaultOn />
             </div>

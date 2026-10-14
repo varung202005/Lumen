@@ -30,18 +30,12 @@ const kindColor: Record<Node["kind"], string> = {
   deployment: "#f2b84b",
 };
 
-const columns: Node[][] = [
-  datasets.slice(0, 4).map((d) => ({ id: d.id, label: d.name, sub: `${d.rows.toLocaleString()} rows`, kind: "dataset", path: `/datasets/${d.id}` })),
-  experiments.slice(0, 4).map((e) => ({ id: e.id, label: e.name, sub: `${e.runCount} runs`, kind: "experiment", path: `/experiments/${e.id}` })),
-  experiments.slice(0, 4).map((e) => ({ id: `${e.id}-best`, label: "Best Run", sub: e.bestMetricName + " " + e.bestMetricValue, kind: "run", path: `/experiments/${e.id}` })),
-  models.map((m) => ({ id: m.id, label: m.name, sub: m.stage, kind: "model", path: `/models/${m.id}` })),
-  [{ id: "deploy-prod", label: "Production", sub: "1 model serving", kind: "deployment" } as Node],
-];
+const columns: Node[][] = [[], [], [], [], []];
 
 const columnLabels = ["Dataset", "Experiment", "Run", "Model", "Deployment"];
 
 export default function Lineage() {
-  const [selected, setSelected] = useState<Node | null>(columns[3][0]);
+  const [selected, setSelected] = useState<Node | null>(null);
 
   return (
     <div className="fade-in flex flex-col gap-6">
@@ -76,6 +70,7 @@ export default function Lineage() {
                     </button>
                   );
                 })}
+                {col.length === 0 && <p className="rounded-lg border border-dashed border-border-soft px-3 py-3 text-center text-[11px] text-text-faint">No data</p>}
               </div>
             ))}
           </div>

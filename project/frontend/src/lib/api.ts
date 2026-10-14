@@ -70,6 +70,29 @@ export interface ApiExperiment {
   runs: ApiRun[];
 }
 
+export interface ApiPromptVersion {
+  version: string;
+  content: string;
+  evalScore: number;
+  updatedAt: string;
+}
+
+export interface ApiPrompt {
+  id: string;
+  name: string;
+  description: string;
+  status: "active" | "draft" | "deprecated";
+  owner: string;
+  updatedAt: string;
+  variables: string[];
+  versions: ApiPromptVersion[];
+}
+
+export interface CopilotResponse {
+  content: string;
+  model: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -120,5 +143,17 @@ export const api = {
   },
   getExperiment(id: string): Promise<ApiExperiment> {
     return request(`/experiments/${id}`);
+  },
+  listPrompts(): Promise<ApiPrompt[]> {
+    return request("/prompts");
+  },
+  createPrompt(payload: { name: string; description: string; content: string }): Promise<ApiPrompt> {
+    return request("/prompts", { method: "POST", body: JSON.stringify(payload) });
+  },
+  getPrompt(id: string): Promise<ApiPrompt> {
+    return request(`/prompts/${id}`);
+  },
+  askCopilot(payload: { messages: { role: "user" | "assistant"; content: string }[]; experimentId?: string }): Promise<CopilotResponse> {
+    return request("/copilot", { method: "POST", body: JSON.stringify(payload) });
   },
 };

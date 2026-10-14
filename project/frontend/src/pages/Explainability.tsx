@@ -24,13 +24,25 @@ function Select({ label, value, onChange, options }: { label: string; value: str
 }
 
 export default function Explainability() {
-  const [modelId, setModelId] = useState(models[0].id);
-  const model = models.find((m) => m.id === modelId)!;
-  const dataset = getDataset(model.datasetId) ?? datasets[0];
-  const exp = experiments.find((e) => e.id.includes(model.id.replace("model-", "")));
+  const [modelId, setModelId] = useState(models[0]?.id ?? "");
+  const model = models.find((m) => m.id === modelId);
+  const dataset = model ? getDataset(model.datasetId) ?? datasets[0] : undefined;
+  const exp = model ? experiments.find((e) => e.id.includes(model.id.replace("model-", ""))) : undefined;
   const runOptions = exp ? getRunsForExperiment(exp.id) : [];
   const [runId, setRunId] = useState(runOptions[0]?.id ?? "");
   const [explType, setExplType] = useState<typeof explanationTypes[number]>("Feature Importance");
+
+  if (!model || !dataset) {
+    return (
+      <div className="fade-in flex flex-col gap-5">
+        <div>
+          <h1 className="text-[20px] font-bold text-text">Explainability Studio</h1>
+          <p className="mt-1 text-[13px] text-text-muted">Understand what drives your model's predictions</p>
+        </div>
+        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-16 text-center text-[13px] text-text-muted">Register a model and complete a run to generate explanations.</div>
+      </div>
+    );
+  }
 
   const sortedFeatures = [...dataset.features].sort((a, b) => b.importance - a.importance);
   const topFeature = sortedFeatures[0];

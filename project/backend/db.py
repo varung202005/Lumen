@@ -55,6 +55,17 @@ def init_db():
             FOREIGN KEY (experiment_id) REFERENCES experiments(id),
             FOREIGN KEY (dataset_id) REFERENCES datasets(id)
         );
+
+        CREATE TABLE IF NOT EXISTS prompts (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL,
+            owner TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            variables_json TEXT NOT NULL,
+            versions_json TEXT NOT NULL
+        );
         """
     )
     conn.commit()

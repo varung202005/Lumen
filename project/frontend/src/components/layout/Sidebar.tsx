@@ -89,9 +89,9 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-3 flex items-center gap-2 rounded-lg border border-border-soft px-2.5 py-2">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-2 text-[11px] font-semibold text-text-muted">VM</div>
+        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-2 text-[11px] font-semibold text-text-muted">U</div>
         <div className="min-w-0">
-          <div className="truncate text-[12px] font-medium text-text">Varun Mehta</div>
+          <div className="truncate text-[12px] font-medium text-text">Workspace user</div>
           <div className="truncate text-[10.5px] text-text-faint">ML Engineer</div>
         </div>
       </div>

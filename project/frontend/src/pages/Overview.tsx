@@ -24,7 +24,7 @@ function buildActivityData() {
     });
     buckets.push({
       date: label,
-      success: dayRuns.filter((r) => r.status === "completed").length || Math.floor(Math.random() * 3),
+      success: dayRuns.filter((r) => r.status === "completed").length,
       failed: dayRuns.filter((r) => r.status === "failed").length,
     });
   }
@@ -46,7 +46,7 @@ export default function Overview() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-[20px] font-bold text-text">Experiment Overview</h1>
-          <p className="mt-1 text-[13px] text-text-muted">Good morning, Varun. Here's what's happening across your workspace.</p>
+          <p className="mt-1 text-[13px] text-text-muted">Here’s what’s happening across your workspace.</p>
         </div>
         <Link to="/experiments" className="flex items-center gap-1.5 rounded-lg bg-lumen px-3.5 py-2 text-[12.5px] font-semibold text-bg transition-opacity hover:opacity-90">
           New Experiment <ArrowRight size={14} />
@@ -54,10 +54,10 @@ export default function Overview() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <MetricCard label="Active Experiments" value={activeExperiments} sub={<span className="flex items-center gap-1 text-track"><FlaskConical size={11} /> across 5 owners</span>} />
+        <MetricCard label="Active Experiments" value={activeExperiments} sub={<span className="flex items-center gap-1 text-track"><FlaskConical size={11} /> from connected workspace data</span>} />
         <MetricCard label="Total Runs" value={totalRuns} sub={<span className="flex items-center gap-1"><GitBranch size={11} /> last 30 days</span>} />
-        <MetricCard label="Best Model" value={formatPct(bestModel.f1, 1)} sub={<span className="flex items-center gap-1"><Boxes size={11} /> {bestModel.name}</span>} />
-        <MetricCard label="Datasets" value={datasets.length} sub={<span className="flex items-center gap-1"><Database size={11} /> 1 drifting</span>} />
+        <MetricCard label="Best Model" value={bestModel ? formatPct(bestModel.f1, 1) : "—"} sub={<span className="flex items-center gap-1"><Boxes size={11} /> {bestModel?.name ?? "No registered models"}</span>} />
+        <MetricCard label="Datasets" value={datasets.length} sub={<span className="flex items-center gap-1"><Database size={11} /> connected datasets</span>} />
         <MetricCard label="AI Insights" value={insights.length} tone="lumen" sub={<span className="flex items-center gap-1 text-lumen"><Sparkles size={11} /> 2 need review</span>} />
       </div>
 
@@ -84,6 +84,7 @@ export default function Overview() {
             <h3 className="text-[13px] font-semibold text-text">Today's Experiment Intelligence</h3>
           </div>
           <div className="flex flex-col divide-y divide-border-soft">
+            {topInsights.length === 0 && <p className="px-5 py-6 text-[12.5px] text-text-muted">No intelligence has been generated yet.</p>}
             {topInsights.map((insight) => (
               <Link key={insight.id} to="/insights" className="flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-surface-hover">
                 <div className="mt-0.5">

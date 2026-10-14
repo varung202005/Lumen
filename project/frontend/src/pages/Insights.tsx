@@ -58,6 +58,7 @@ export default function Insights() {
       </div>
 
       <div className="flex flex-col gap-3">
+        {filtered.length === 0 && <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-16 text-center text-[13px] text-text-muted">No intelligence has been generated yet.</div>}
         {filtered.map((insight) => {
           const Icon = severityIcon[insight.severity];
           return (
