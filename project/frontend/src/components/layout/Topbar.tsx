@@ -1,6 +1,8 @@
 import { Search, Bell } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export function Topbar({ onSearchClick }: { onSearchClick: () => void }) {
+  const navigate = useNavigate();
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border-soft px-6">
       <button
@@ -13,12 +15,12 @@ export function Topbar({ onSearchClick }: { onSearchClick: () => void }) {
       </button>
 
       <div className="flex items-center gap-3">
-        <button className="relative flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-2">
+        <button onClick={() => navigate("/insights")} aria-label="Open insights" className="relative flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-2">
           <Bell size={16} />
           <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-lumen" />
         </button>
         <div className="h-6 w-px bg-border-soft" />
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-2 text-[11.5px] font-semibold text-text-muted">VM</div>
+        <button onClick={() => navigate("/settings")} aria-label="Open settings" className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-2 text-[11.5px] font-semibold text-text-muted">U</button>
       </div>
     </header>
   );

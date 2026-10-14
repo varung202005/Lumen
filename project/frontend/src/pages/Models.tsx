@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Search, Plus } from "lucide-react";
 import { models } from "@/data/models";
 import { StageBadge } from "@/components/ui/Badge";
@@ -11,6 +11,7 @@ const stages: (ModelStage | "all")[] = ["all", "Development", "Staging", "Produc
 export default function Models() {
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState<ModelStage | "all">("all");
+  const navigate = useNavigate();
 
   const filtered = useMemo(
     () => models.filter((m) => (stage === "all" || m.stage === stage) && m.name.toLowerCase().includes(query.toLowerCase())),
@@ -24,8 +25,8 @@ export default function Models() {
           <h1 className="text-[20px] font-bold text-text">Model Registry</h1>
           <p className="mt-1 text-[13px] text-text-muted">{models.length} registered models</p>
         </div>
-        <button className="flex items-center gap-1.5 rounded-lg bg-lumen px-3.5 py-2 text-[12.5px] font-semibold text-bg transition-opacity hover:opacity-90">
-          <Plus size={14} /> Register Model
+        <button onClick={() => navigate("/experiments/new")} className="flex items-center gap-1.5 rounded-lg bg-lumen px-3.5 py-2 text-[12.5px] font-semibold text-bg transition-opacity hover:opacity-90">
+          <Plus size={14} /> Train Model
         </button>
       </div>
 

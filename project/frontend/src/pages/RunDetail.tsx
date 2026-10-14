@@ -21,6 +21,16 @@ const artifactIcons: Record<string, any> = {
   other: FileText,
 };
 
+function downloadJson(filename: string, value: unknown) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function RealRunDetail({ run }: { run: ApiRun }) {
   return (
     <div className="fade-in flex flex-col gap-6">
@@ -161,7 +171,7 @@ export default function RunDetail() {
               <span>Created {formatRelativeTime(run.createdAt)}</span>
             </div>
           </div>
-          <button className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-text-muted hover:text-text">
+          <button onClick={() => downloadJson(`${run.id}.json`, run)} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] font-medium text-text-muted hover:text-text">
             <Download size={13} /> Export
           </button>
         </div>
@@ -233,7 +243,7 @@ export default function RunDetail() {
                   <div className="truncate font-mono text-[12.5px] text-text">{a.name}</div>
                   <div className="text-[11px] text-text-faint">{formatBytes(a.sizeKb)}</div>
                 </div>
-                <button className="text-text-faint hover:text-text"><Download size={14} /></button>
+                <button onClick={() => downloadJson(a.name.replace(/\.[^.]+$/, "") + ".json", a)} aria-label={`Download ${a.name} metadata`} className="text-text-faint hover:text-text"><Download size={14} /></button>
               </div>
             );
           })}

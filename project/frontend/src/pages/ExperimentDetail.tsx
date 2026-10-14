@@ -84,6 +84,7 @@ export default function ExperimentDetail() {
   const [realExperiment, setRealExperiment] = useState<ApiExperiment | null>(null);
   const [loadingReal, setLoadingReal] = useState(false);
   const [realError, setRealError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (experiment || !id) return;
@@ -143,7 +144,10 @@ export default function ExperimentDetail() {
             >
               <GitCompare size={14} /> Compare Runs {selected.length > 0 && `(${selected.length})`}
             </button>
-            <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-text-muted hover:text-text"><MoreHorizontal size={16} /></button>
+            <div className="relative">
+              <button onClick={() => setMenuOpen((open) => !open)} aria-label="Open experiment actions" className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-text-muted hover:text-text"><MoreHorizontal size={16} /></button>
+              {menuOpen && <div className="absolute right-0 z-10 mt-1.5 w-40 rounded-lg border border-border bg-surface-2 p-1.5 shadow-xl"><Link to="/experiments/new" onClick={() => setMenuOpen(false)} className="block rounded-md px-2.5 py-2 text-[12px] text-text-muted hover:bg-surface hover:text-text">Start new run</Link><button onClick={() => { navigator.clipboard?.writeText(experiment.id); setMenuOpen(false); }} className="w-full rounded-md px-2.5 py-2 text-left text-[12px] text-text-muted hover:bg-surface hover:text-text">Copy experiment ID</button></div>}
+            </div>
           </div>
         </div>
       </div>
