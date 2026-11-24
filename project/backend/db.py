@@ -66,6 +66,22 @@ def init_db():
             variables_json TEXT NOT NULL,
             versions_json TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS insights (
+            id TEXT PRIMARY KEY,
+            run_id TEXT,
+            experiment_id TEXT,
+            dataset_id TEXT,
+            type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            title TEXT NOT NULL,
+            explanation TEXT NOT NULL,
+            recommendation TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (run_id) REFERENCES runs(id),
+            FOREIGN KEY (experiment_id) REFERENCES experiments(id),
+            FOREIGN KEY (dataset_id) REFERENCES datasets(id)
+        );
         """
     )
     conn.commit()

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 import db
 from profiling import profile_csv
 from training import train_and_evaluate
+from diagnostics import diagnose_run
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -71,6 +72,8 @@ async def upload_dataset(file: UploadFile = File(...)):
         raise HTTPException(400, f"Failed to parse CSV: {e}")
 
     conn = db.get_conn()
+    version = conn.execute("SELECT COUNT(*) AS count FROM datasets WHERE filename = ?", (file.filename,)).fetchone()["count"] + 1
+    profile["version"] = version
     conn.execute(
         "INSERT INTO datasets (id, name, filename, path, size_bytes, rows, columns, uploaded_at, profile_json) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -164,6 +167,48 @@ def experiment_to_api(row: dict) -> dict:
     }
 
 
+def insight_to_api(row: dict) -> dict:
+    return {
+        "id": row["id"], "runId": row["run_id"], "experimentId": row["experiment_id"],
+        "datasetId": row["dataset_id"], "type": row["type"], "severity": row["severity"],
+        "title": row["title"], "explanation": row["explanation"],
+        "recommendation": row["recommendation"], "createdAt": row["created_at"],
+    }
+
+
+def persist_diagnostics(conn, run_id: str, experiment_id: str, dataset_id: str, status: str, metrics: dict | None, error: str | None):
+    previous_rows = conn.execute(
+        "SELECT status, metrics_json FROM runs WHERE experiment_id = ? AND id != ?", (experiment_id, run_id)
+    ).fetchall()
+    previous = [{"status": r["status"], "metrics": json.loads(r["metrics_json"]) if r["metrics_json"] else None} for r in previous_rows]
+    for finding in diagnose_run(run_id, experiment_id, dataset_id, status, metrics, error, previous):
+        conn.execute(
+            "INSERT INTO insights (id, run_id, experiment_id, dataset_id, type, severity, title, explanation, recommendation, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (db.new_id("ins"), finding["run_id"], finding["experiment_id"], finding["dataset_id"], finding["type"], finding["severity"], finding["title"], finding["explanation"], finding["recommendation"], db.now_iso()),
+        )
+
+
+def persist_dataset_findings(conn, dataset_id: str, experiment_id: str, run_id: str, profile: dict):
+    findings = []
+    for col in profile.get("piiColumns", []):
+        findings.append(("dataset-warning", "warning", "Potential PII in dataset", f"Column '{col}' appears to contain personal data.", "Mask, remove, or restrict access to this column before using the dataset."))
+    for leakage in profile.get("potentialLeakage", []):
+        findings.append(("root-cause", "critical", "Potential target leakage", f"Feature '{leakage['column']}' may leak the target ({leakage['reason']}).", "Remove the feature and retrain to validate realistic performance."))
+    balance = profile.get("classBalance")
+    if balance and balance["minorityPercent"] < 20:
+        findings.append(("dataset-warning", "warning", "Class imbalance detected", f"The smallest target class represents {balance['minorityPercent']}% of rows.", "Try class weights, resampling, and F1-based evaluation."))
+    for drift in profile.get("drift", []):
+        findings.append(("dataset-warning", "warning", "Feature drift detected", f"'{drift['column']}' mean changed {drift['meanChangePercent']}% from the prior dataset version.", "Review the data source and consider retraining with the latest distribution."))
+    for outlier in profile.get("outliers", [])[:3]:
+        if outlier["percent"] >= 5:
+            findings.append(("dataset-warning", "info", "High outlier rate", f"'{outlier['column']}' has {outlier['percent']}% IQR outliers.", "Inspect extreme values and consider robust preprocessing."))
+    for kind, severity, title, explanation, recommendation in findings:
+        conn.execute(
+            "INSERT INTO insights (id, run_id, experiment_id, dataset_id, type, severity, title, explanation, recommendation, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (db.new_id("ins"), run_id, experiment_id, dataset_id, kind, severity, title, explanation, recommendation, db.now_iso()),
+        )
+
+
 @app.post("/api/runs")
 def create_run(req: CreateRunRequest):
     conn = db.get_conn()
@@ -196,6 +241,20 @@ def create_run(req: CreateRunRequest):
     )
     conn.commit()
 
+    # Refresh profile with target-aware checks and compare it to the prior upload of this file.
+    reference_row = conn.execute(
+        "SELECT path FROM datasets WHERE filename = ? AND id != ? ORDER BY uploaded_at DESC LIMIT 1",
+        (ds_row["filename"], req.datasetId),
+    ).fetchone()
+    enhanced_profile = profile_csv(
+        db.row_to_dict(ds_row)["path"], req.targetColumn,
+        db.row_to_dict(reference_row)["path"] if reference_row else None,
+    )
+    enhanced_profile["version"] = json.loads(ds_row["profile_json"]).get("version", 1)
+    conn.execute("UPDATE datasets SET profile_json = ? WHERE id = ?", (json.dumps(enhanced_profile), req.datasetId))
+    persist_dataset_findings(conn, req.datasetId, experiment_id, run_id, enhanced_profile)
+    conn.commit()
+
     start = time.time()
     try:
         metrics = train_and_evaluate(
@@ -209,18 +268,28 @@ def create_run(req: CreateRunRequest):
             "UPDATE runs SET status='completed', metrics_json=?, finished_at=?, duration_sec=? WHERE id=?",
             (json.dumps(metrics), db.now_iso(), duration, run_id),
         )
+        persist_diagnostics(conn, run_id, experiment_id, req.datasetId, "completed", metrics, None)
     except Exception as e:
         duration = round(time.time() - start, 3)
         conn.execute(
             "UPDATE runs SET status='failed', error=?, finished_at=?, duration_sec=? WHERE id=?",
             (f"{e}", db.now_iso(), duration, run_id),
         )
+        persist_diagnostics(conn, run_id, experiment_id, req.datasetId, "failed", None, str(e))
         traceback.print_exc()
 
     conn.commit()
     row = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
     conn.close()
     return run_to_api(db.row_to_dict(row))
+
+
+@app.get("/api/insights")
+def list_insights():
+    conn = db.get_conn()
+    rows = conn.execute("SELECT * FROM insights ORDER BY created_at DESC").fetchall()
+    conn.close()
+    return [insight_to_api(db.row_to_dict(row)) for row in rows]
 
 
 @app.get("/api/runs")

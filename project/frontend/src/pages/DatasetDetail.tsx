@@ -26,7 +26,7 @@ function RealDatasetDetail({ dataset }: { dataset: ApiDataset }) {
         <div className="mt-3 flex items-start justify-between gap-4">
           <div>
             <h1 className="font-mono text-[20px] font-bold text-text">{dataset.name}</h1>
-            <p className="mt-1.5 text-[13px] text-text-muted">{dataset.filename} · Uploaded {formatRelativeTime(dataset.uploadedAt)}</p>
+            <p className="mt-1.5 text-[13px] text-text-muted">{dataset.filename} · Version {p.version ?? 1} · Uploaded {formatRelativeTime(dataset.uploadedAt)}</p>
           </div>
           <div className="flex items-center gap-2">
             <Badge tone="success">ready</Badge>
@@ -118,6 +118,9 @@ function RealDatasetDetail({ dataset }: { dataset: ApiDataset }) {
           <MetricCard label="Duplicate Rows" value={p.duplicateRows} />
           <MetricCard label="Columns w/ High Missingness" value={highMissing.length} />
           <MetricCard label="Numeric Columns" value={numericCols.length} />
+          <MetricCard label="PII Candidates" value={p.piiColumns?.length ?? 0} />
+          <MetricCard label="Outlier Columns" value={p.outliers?.length ?? 0} />
+          <MetricCard label="Drifted Columns" value={p.drift?.length ?? 0} />
         </div>
       )}
     </div>

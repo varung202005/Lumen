@@ -21,6 +21,12 @@ export interface DatasetProfile {
   duplicateRows: number;
   columnProfiles: ColumnProfile[];
   observations: { severity: string; message: string }[];
+  version?: number;
+  piiColumns?: string[];
+  outliers?: { column: string; count: number; percent: number }[];
+  classBalance?: { classes: Record<string, number>; minorityPercent: number } | null;
+  potentialLeakage?: { column: string; reason: string }[];
+  drift?: { column: string; meanChangePercent: number }[];
 }
 
 export interface ApiDataset {
@@ -93,6 +99,19 @@ export interface CopilotResponse {
   model: string;
 }
 
+export interface ApiInsight {
+  id: string;
+  runId: string | null;
+  experimentId: string | null;
+  datasetId: string | null;
+  type: string;
+  severity: "critical" | "warning" | "info" | "success";
+  title: string;
+  explanation: string;
+  recommendation: string;
+  createdAt: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -152,6 +171,9 @@ export const api = {
   },
   getPrompt(id: string): Promise<ApiPrompt> {
     return request(`/prompts/${id}`);
+  },
+  listInsights(): Promise<ApiInsight[]> {
+    return request("/insights");
   },
   askCopilot(payload: { messages: { role: "user" | "assistant"; content: string }[]; experimentId?: string }): Promise<CopilotResponse> {
     return request("/copilot", { method: "POST", body: JSON.stringify(payload) });
