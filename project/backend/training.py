@@ -1,5 +1,7 @@
 """Real model training used by Module 2 (Experiment Tracking + Model Training)."""
 import time
+import os
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -44,7 +46,7 @@ def build_model(model_type: str, params: dict):
     return cls(**kwargs)
 
 
-def train_and_evaluate(csv_path: str, target_column: str, model_type: str, params: dict, test_size: float = 0.2):
+def train_and_evaluate(csv_path: str, target_column: str, model_type: str, params: dict, test_size: float = 0.2, artifact_path: str | None = None):
     start = time.time()
     df = pd.read_csv(csv_path)
 
@@ -83,6 +85,9 @@ def train_and_evaluate(csv_path: str, target_column: str, model_type: str, param
 
     model = build_model(model_type, params)
     model.fit(X_train, y_train)
+    if artifact_path:
+        os.makedirs(os.path.dirname(artifact_path), exist_ok=True)
+        joblib.dump({"model": model, "featureNames": list(X.columns), "targetColumn": target_column, "modelType": model_type}, artifact_path)
     y_pred = model.predict(X_test)
 
     # These are actual contributions from the fitted sklearn estimator.  Tree

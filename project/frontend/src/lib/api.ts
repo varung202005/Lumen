@@ -119,6 +119,10 @@ export interface ApiInsight {
   createdAt: string;
 }
 
+export interface ApiArtifact { id: string; name: string; type: string; size_bytes: number; created_at: string; }
+export interface ApiDeployment { id: string; model_id: string; environment: string; status: string; endpoint: string; created_at: string; }
+export interface ApiModel { id: string; runId: string; name: string; stage: "Development" | "Staging" | "Production" | "Archived"; createdAt: string; run: ApiRun | null; deployments: ApiDeployment[]; artifacts?: ApiArtifact[]; }
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -185,6 +189,10 @@ export const api = {
   listInsights(): Promise<ApiInsight[]> {
     return request("/insights");
   },
+  listModels(): Promise<ApiModel[]> { return request("/models"); },
+  getModel(id: string): Promise<ApiModel> { return request(`/models/${id}`); },
+  setModelStage(id: string, stage: ApiModel["stage"]): Promise<ApiModel> { return request(`/models/${id}/stage`, { method: "POST", body: JSON.stringify({ stage }) }); },
+  deployModel(id: string, environment: "staging" | "production"): Promise<ApiDeployment> { return request(`/models/${id}/deploy`, { method: "POST", body: JSON.stringify({ environment }) }); },
   askCopilot(payload: { messages: { role: "user" | "assistant"; content: string }[]; experimentId?: string }): Promise<CopilotResponse> {
     return request("/copilot", { method: "POST", body: JSON.stringify(payload) });
   },

@@ -82,6 +82,36 @@ def init_db():
             FOREIGN KEY (experiment_id) REFERENCES experiments(id),
             FOREIGN KEY (dataset_id) REFERENCES datasets(id)
         );
+
+        CREATE TABLE IF NOT EXISTS artifacts (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            path TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (run_id) REFERENCES runs(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS models (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            stage TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (run_id) REFERENCES runs(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS deployments (
+            id TEXT PRIMARY KEY,
+            model_id TEXT NOT NULL,
+            environment TEXT NOT NULL,
+            status TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (model_id) REFERENCES models(id)
+        );
         """
     )
     conn.commit()

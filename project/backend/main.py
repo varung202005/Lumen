@@ -18,7 +18,9 @@ from training import train_and_evaluate
 from diagnostics import diagnose_run
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), "artifacts")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
 app = FastAPI(title="Lumen Backend")
 
@@ -141,6 +143,14 @@ class CopilotRequest(BaseModel):
     experimentId: Optional[str] = None
 
 
+class ModelStageRequest(BaseModel):
+    stage: str
+
+
+class DeploymentRequest(BaseModel):
+    environment: str = "staging"
+
+
 def run_to_api(row: dict) -> dict:
     return {
         "id": row["id"],
@@ -174,6 +184,13 @@ def insight_to_api(row: dict) -> dict:
         "title": row["title"], "explanation": row["explanation"],
         "recommendation": row["recommendation"], "createdAt": row["created_at"],
     }
+
+
+def model_to_api(conn, row: dict) -> dict:
+    run = conn.execute("SELECT * FROM runs WHERE id = ?", (row["run_id"],)).fetchone()
+    run_data = run_to_api(db.row_to_dict(run)) if run else None
+    deployments = conn.execute("SELECT * FROM deployments WHERE model_id = ? ORDER BY created_at DESC", (row["id"],)).fetchall()
+    return {"id": row["id"], "runId": row["run_id"], "name": row["name"], "stage": row["stage"], "createdAt": row["created_at"], "run": run_data, "deployments": [db.row_to_dict(d) for d in deployments]}
 
 
 def persist_diagnostics(conn, run_id: str, experiment_id: str, dataset_id: str, status: str, metrics: dict | None, error: str | None):
@@ -257,16 +274,28 @@ def create_run(req: CreateRunRequest):
 
     start = time.time()
     try:
+        artifact_path = os.path.join(ARTIFACT_DIR, f"{run_id}_model.joblib")
         metrics = train_and_evaluate(
             csv_path=db.row_to_dict(ds_row)["path"],
             target_column=req.targetColumn,
             model_type=req.modelType,
             params=req.params,
+            artifact_path=artifact_path,
         )
         duration = round(time.time() - start, 3)
         conn.execute(
             "UPDATE runs SET status='completed', metrics_json=?, finished_at=?, duration_sec=? WHERE id=?",
             (json.dumps(metrics), db.now_iso(), duration, run_id),
+        )
+        if os.path.exists(artifact_path):
+            conn.execute(
+                "INSERT INTO artifacts (id, run_id, name, type, path, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (db.new_id("art"), run_id, os.path.basename(artifact_path), "model", artifact_path, os.path.getsize(artifact_path), db.now_iso()),
+            )
+        model_id = db.new_id("model")
+        conn.execute(
+            "INSERT INTO models (id, run_id, name, stage, created_at) VALUES (?, ?, ?, ?, ?)",
+            (model_id, run_id, f"{req.modelType.replace('_', ' ').title()} — {run_id}", "Development", db.now_iso()),
         )
         persist_diagnostics(conn, run_id, experiment_id, req.datasetId, "completed", metrics, None)
     except Exception as e:
@@ -290,6 +319,55 @@ def list_insights():
     rows = conn.execute("SELECT * FROM insights ORDER BY created_at DESC").fetchall()
     conn.close()
     return [insight_to_api(db.row_to_dict(row)) for row in rows]
+
+
+@app.get("/api/models")
+def list_models():
+    conn = db.get_conn()
+    rows = conn.execute("SELECT * FROM models ORDER BY created_at DESC").fetchall()
+    models = [model_to_api(conn, db.row_to_dict(row)) for row in rows]
+    conn.close()
+    return models
+
+
+@app.get("/api/models/{model_id}")
+def get_model(model_id: str):
+    conn = db.get_conn()
+    row = conn.execute("SELECT * FROM models WHERE id = ?", (model_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Model not found")
+    model = model_to_api(conn, db.row_to_dict(row))
+    artifacts = conn.execute("SELECT id, name, type, size_bytes, created_at FROM artifacts WHERE run_id = ?", (model["runId"],)).fetchall()
+    conn.close()
+    model["artifacts"] = [db.row_to_dict(artifact) for artifact in artifacts]
+    return model
+
+
+@app.post("/api/models/{model_id}/stage")
+def set_model_stage(model_id: str, req: ModelStageRequest):
+    if req.stage not in {"Development", "Staging", "Production", "Archived"}:
+        raise HTTPException(400, "Invalid model stage")
+    conn = db.get_conn()
+    if not conn.execute("SELECT 1 FROM models WHERE id = ?", (model_id,)).fetchone():
+        conn.close(); raise HTTPException(404, "Model not found")
+    conn.execute("UPDATE models SET stage = ? WHERE id = ?", (req.stage, model_id)); conn.commit()
+    row = conn.execute("SELECT * FROM models WHERE id = ?", (model_id,)).fetchone(); result = model_to_api(conn, db.row_to_dict(row)); conn.close()
+    return result
+
+
+@app.post("/api/models/{model_id}/deploy")
+def deploy_model(model_id: str, req: DeploymentRequest):
+    environment = req.environment.lower()
+    if environment not in {"staging", "production"}:
+        raise HTTPException(400, "Environment must be staging or production")
+    conn = db.get_conn()
+    if not conn.execute("SELECT 1 FROM models WHERE id = ?", (model_id,)).fetchone():
+        conn.close(); raise HTTPException(404, "Model not found")
+    deployment = {"id": db.new_id("dep"), "model_id": model_id, "environment": environment, "status": "ready", "endpoint": f"local://models/{model_id}/{environment}", "created_at": db.now_iso()}
+    conn.execute("INSERT INTO deployments (id, model_id, environment, status, endpoint, created_at) VALUES (:id, :model_id, :environment, :status, :endpoint, :created_at)", deployment)
+    conn.execute("UPDATE models SET stage = ? WHERE id = ?", ("Production" if environment == "production" else "Staging", model_id)); conn.commit(); conn.close()
+    return deployment
 
 
 @app.get("/api/runs")
