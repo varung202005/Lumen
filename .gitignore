@@ -1,0 +1,10 @@
+# Runtime and secrets
+.env
+*.db
+project/backend/uploads/
+project/backend/artifacts/
+project/backend/__pycache__/
+**/__pycache__/
+*.py[cod]
+project/frontend/dist/
+project/frontend/node_modules/

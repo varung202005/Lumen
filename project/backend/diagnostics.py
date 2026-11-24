@@ -9,6 +9,13 @@ def diagnose_run(run_id: str, experiment_id: str, dataset_id: str, status: str, 
         return findings
     if not metrics:
         return findings
+    if metrics.get("taskType") == "regression":
+        r2 = metrics.get("r2", 0)
+        if r2 < 0:
+            add("performance", "warning", "Regression underperforms the baseline", f"R² is {r2:.3f}, meaning the model is worse than predicting the mean.", "Review target quality and try a different feature set or regressor.")
+        else:
+            add("performance", "success", "Regression run completed", f"R² is {r2:.3f}, RMSE is {metrics.get('rmse', 0):.3f}.", "Compare this result with another regressor using the same split.")
+        return findings
     accuracy, f1 = metrics.get("accuracy", 0), metrics.get("f1", 0)
     if f1 < 0.60:
         add("performance", "warning", "Low validation F1 score", f"This run reached F1 {f1:.3f}, below the 0.60 baseline used by Lumen.", "Review features and target quality, then compare a different model or parameter setting.")

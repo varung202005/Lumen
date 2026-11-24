@@ -1,0 +1,26 @@
+services:
+  backend:
+    build: ./project/backend
+    environment:
+      LUMEN_CORS_ORIGINS: ${LUMEN_CORS_ORIGINS:-http://localhost:8080}
+      LUMEN_API_KEY: ${LUMEN_API_KEY:-}
+      LUMEN_STORAGE_DIR: /data
+      LUMEN_DB_PATH: /data/lumen.db
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LUMEN_GEMINI_MODEL: ${LUMEN_GEMINI_MODEL:-gemini-3.8-flash}
+    volumes:
+      - lumen-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  frontend:
+    build: ./project/frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  lumen-data:

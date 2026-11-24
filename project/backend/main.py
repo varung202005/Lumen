@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
 import db
@@ -17,20 +18,33 @@ from profiling import profile_csv
 from training import train_and_evaluate
 from diagnostics import diagnose_run
 
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
-ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), "artifacts")
+STORAGE_DIR = os.getenv("LUMEN_STORAGE_DIR", os.path.dirname(__file__))
+UPLOAD_DIR = os.path.join(STORAGE_DIR, "uploads")
+ARTIFACT_DIR = os.path.join(STORAGE_DIR, "artifacts")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
 app = FastAPI(title="Lumen Backend")
 
+cors_origins = [origin.strip() for origin in os.getenv("LUMEN_CORS_ORIGINS", "http://localhost:5173").split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def optional_api_key(request, call_next):
+    """Protect API access in shared deployments when LUMEN_API_KEY is configured."""
+    expected = os.getenv("LUMEN_API_KEY")
+    if expected and request.url.path.startswith("/api") and request.url.path != "/api/health":
+        if request.headers.get("x-api-key") != expected:
+            return JSONResponse(status_code=401, content={"detail": "Missing or invalid API key"})
+    return await call_next(request)
 
 
 @app.on_event("startup")

@@ -1,10 +1,14 @@
 # Lumen backend
 
-The AI Copilot uses the Gemini Generate Content API from the backend. Configure the backend process before starting it:
+Run locally with `pip install -r requirements.txt` then `uvicorn main:app --reload`.
+The API is available at `http://localhost:8000`; the health endpoint is `/api/health`.
 
-```bash
-export GEMINI_API_KEY="your_api_key"
-export LUMEN_GEMINI_MODEL="gemini-3.8-flash"
-```
+Configuration is environment based:
 
-The API key must stay on the server and must not be added to frontend code. The Copilot endpoint is `POST /api/copilot` and automatically includes recent run context from Lumen.
+- `GEMINI_API_KEY`: optional server-only Gemini key for Copilot.
+- `LUMEN_GEMINI_MODEL`: Gemini model name.
+- `LUMEN_CORS_ORIGINS`: comma-separated permitted frontend origins.
+- `LUMEN_API_KEY`: optional shared API key. If set, clients must send `X-API-Key` for API routes other than health.
+- `LUMEN_STORAGE_DIR` / `LUMEN_DB_PATH`: storage locations used in containers.
+
+Run checks with `pytest -q` and `python -m compileall -q .`.

@@ -6,10 +6,15 @@ import { Badge } from "@/components/ui/Badge";
 import { MetricCard } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 
-const MODEL_OPTIONS = [
+const CLASSIFICATION_MODELS = [
   { value: "logistic_regression", label: "Logistic Regression" },
   { value: "random_forest", label: "Random Forest" },
   { value: "decision_tree", label: "Decision Tree" },
+];
+const REGRESSION_MODELS = [
+  { value: "linear_regression", label: "Linear Regression" },
+  { value: "random_forest_regressor", label: "Random Forest Regressor" },
+  { value: "decision_tree_regressor", label: "Decision Tree Regressor" },
 ];
 
 export default function NewExperiment() {
@@ -34,6 +39,9 @@ export default function NewExperiment() {
   }, []);
 
   const selectedDataset = useMemo(() => datasets.find((d) => d.id === datasetId), [datasets, datasetId]);
+  const targetProfile = selectedDataset?.profile.columnProfiles.find((column) => column.name === targetColumn);
+  const regression = targetProfile?.type === "numeric";
+  const modelOptions = regression ? [...CLASSIFICATION_MODELS, ...REGRESSION_MODELS] : CLASSIFICATION_MODELS;
 
   useEffect(() => {
     if (selectedDataset && !selectedDataset.profile.columnProfiles.some((c) => c.name === targetColumn)) {
@@ -43,14 +51,19 @@ export default function NewExperiment() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDataset]);
 
+  useEffect(() => {
+    if (regression && !REGRESSION_MODELS.some((model) => model.value === modelType)) setModelType("random_forest_regressor");
+    if (!regression && REGRESSION_MODELS.some((model) => model.value === modelType)) setModelType("random_forest");
+  }, [modelType, regression]);
+
   async function handleTrain() {
     if (!datasetId || !targetColumn) return;
     setRunning(true);
     setError(null);
     setResult(null);
     const trainingParams: Record<string, unknown> = {};
-    if (modelType === "random_forest") trainingParams.n_estimators = nEstimators;
-    if (modelType === "random_forest" || modelType === "decision_tree") {
+    if (modelType === "random_forest" || modelType === "random_forest_regressor") trainingParams.n_estimators = nEstimators;
+    if (["random_forest", "random_forest_regressor", "decision_tree", "decision_tree_regressor"].includes(modelType)) {
       if (maxDepth) trainingParams.max_depth = Number(maxDepth);
     }
     try {
@@ -116,13 +129,13 @@ export default function NewExperiment() {
                 onChange={(e) => setModelType(e.target.value)}
                 className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-[12.5px] text-text focus:outline-none"
               >
-                {MODEL_OPTIONS.map((m) => (
+                {modelOptions.map((m) => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
               </select>
             </div>
 
-            {modelType === "random_forest" && (
+            {(modelType === "random_forest" || modelType === "random_forest_regressor") && (
               <div>
                 <label className="mb-1.5 block text-[11.5px] font-medium text-text-muted">n_estimators</label>
                 <input
@@ -136,7 +149,7 @@ export default function NewExperiment() {
               </div>
             )}
 
-            {(modelType === "random_forest" || modelType === "decision_tree") && (
+            {(["random_forest", "random_forest_regressor", "decision_tree", "decision_tree_regressor"].includes(modelType)) && (
               <div>
                 <label className="mb-1.5 block text-[11.5px] font-medium text-text-muted">max_depth (blank = unlimited)</label>
                 <input
@@ -178,16 +191,13 @@ export default function NewExperiment() {
                 {result.metrics && (
                   <>
                     <div className="grid grid-cols-2 gap-2.5">
-                      <MetricCard label="Accuracy" value={`${(result.metrics.accuracy * 100).toFixed(1)}%`} />
-                      <MetricCard label="F1" value={result.metrics.f1} tone="lumen" />
-                      <MetricCard label="Precision" value={`${(result.metrics.precision * 100).toFixed(1)}%`} />
-                      <MetricCard label="Recall" value={`${(result.metrics.recall * 100).toFixed(1)}%`} />
+                      {result.metrics.taskType === "regression" ? <><MetricCard label="R²" value={result.metrics.r2 ?? "—"} tone="lumen" /><MetricCard label="RMSE" value={result.metrics.rmse ?? "—"} /><MetricCard label="MAE" value={result.metrics.mae ?? "—"} /></> : <><MetricCard label="Accuracy" value={`${((result.metrics.accuracy ?? 0) * 100).toFixed(1)}%`} /><MetricCard label="F1" value={result.metrics.f1 ?? "—"} tone="lumen" /><MetricCard label="Precision" value={`${((result.metrics.precision ?? 0) * 100).toFixed(1)}%`} /><MetricCard label="Recall" value={`${((result.metrics.recall ?? 0) * 100).toFixed(1)}%`} /></>}
                     </div>
-                    <div>
-                      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">Confusion Matrix ({result.metrics.classNames.join(" / ")})</div>
+                    {result.metrics.taskType !== "regression" && <div>
+                      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">Confusion Matrix ({result.metrics.classNames?.join(" / ")})</div>
                       <table className="border-collapse text-[12px]">
                         <tbody>
-                          {result.metrics.confusionMatrix.map((row, i) => (
+                          {result.metrics.confusionMatrix?.map((row, i) => (
                             <tr key={i}>
                               {row.map((v, j) => (
                                 <td key={j} className={cn("border border-border-soft px-3 py-1.5 text-center font-mono", i === j ? "bg-[#0d2419] text-success" : "text-text-muted")}>{v}</td>
@@ -196,7 +206,7 @@ export default function NewExperiment() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </div>}
                     <p className="text-[11.5px] text-text-faint">Trained on {result.metrics.trainRows} rows, tested on {result.metrics.testRows} rows, {result.metrics.featureCount} features, in {result.metrics.trainingTimeSec}s.</p>
                   </>
                 )}

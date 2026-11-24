@@ -5,7 +5,7 @@ import os
 import time
 import uuid
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "lumen.db")
+DB_PATH = os.getenv("LUMEN_DB_PATH", os.path.join(os.path.dirname(__file__), "lumen.db"))
 
 
 def get_conn():

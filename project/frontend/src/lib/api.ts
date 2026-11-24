@@ -47,6 +47,11 @@ export interface RunMetrics {
   f1: number;
   confusionMatrix: number[][];
   classNames: string[];
+  mae?: number;
+  rmse?: number;
+  r2?: number;
+  taskType?: "classification" | "regression";
+  reproducibility?: { randomSeed: number; python: string; scikitLearn: string; pandas: string; numpy: string; testSize: number };
   trainRows: number;
   testRows: number;
   featureCount: number;
