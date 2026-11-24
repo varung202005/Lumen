@@ -85,6 +85,31 @@ def train_and_evaluate(csv_path: str, target_column: str, model_type: str, param
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
+    # These are actual contributions from the fitted sklearn estimator.  Tree
+    # models expose feature_importances_; linear models use absolute coefficients.
+    if hasattr(model, "feature_importances_"):
+        raw_importance = np.asarray(model.feature_importances_, dtype=float)
+        method = "sklearn feature importance"
+    elif hasattr(model, "coef_"):
+        coefficients = np.asarray(model.coef_, dtype=float)
+        raw_importance = np.mean(np.abs(coefficients), axis=0) if coefficients.ndim > 1 else np.abs(coefficients)
+        method = "absolute logistic-regression coefficient"
+    else:
+        raw_importance = np.zeros(X.shape[1], dtype=float)
+        method = "model importance unavailable"
+    total = float(raw_importance.sum())
+    normalized = raw_importance / total if total else raw_importance
+    feature_importance = sorted(
+        [{"name": str(name), "importance": round(float(score), 6)} for name, score in zip(X.columns, normalized)],
+        key=lambda item: item["importance"], reverse=True,
+    )
+    top = feature_importance[0] if feature_importance else None
+    summary = (
+        f"{top['name']} is the strongest model signal, accounting for about {top['importance'] * 100:.1f}% "
+        f"of the measured importance according to {method}."
+        if top else "This model did not expose feature importance values."
+    )
+
     average = "binary" if n_classes == 2 else "macro"
     metrics = {
         "accuracy": round(float(accuracy_score(y_test, y_pred)), 4),
@@ -97,5 +122,10 @@ def train_and_evaluate(csv_path: str, target_column: str, model_type: str, param
         "testRows": int(len(X_test)),
         "featureCount": int(X.shape[1]),
         "trainingTimeSec": round(time.time() - start, 3),
+        "explanation": {
+            "method": method,
+            "featureImportance": feature_importance,
+            "summary": summary,
+        },
     }
     return metrics

@@ -315,6 +315,21 @@ def get_run(run_id: str):
     return run_to_api(db.row_to_dict(row))
 
 
+@app.get("/api/runs/{run_id}/explanation")
+def get_run_explanation(run_id: str):
+    conn = db.get_conn()
+    row = conn.execute("SELECT metrics_json, status FROM runs WHERE id = ?", (run_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "Run not found")
+    if row["status"] != "completed" or not row["metrics_json"]:
+        raise HTTPException(409, "An explanation is available only after a successful run")
+    explanation = json.loads(row["metrics_json"]).get("explanation")
+    if not explanation:
+        raise HTTPException(404, "This run was created before explanations were enabled; train it again to generate one")
+    return explanation
+
+
 @app.get("/api/experiments")
 def list_experiments():
     conn = db.get_conn()

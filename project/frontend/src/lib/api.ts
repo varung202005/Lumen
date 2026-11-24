@@ -51,6 +51,13 @@ export interface RunMetrics {
   testRows: number;
   featureCount: number;
   trainingTimeSec: number;
+  explanation?: RunExplanation;
+}
+
+export interface RunExplanation {
+  method: string;
+  featureImportance: { name: string; importance: number }[];
+  summary: string;
 }
 
 export interface ApiRun {
@@ -156,6 +163,9 @@ export const api = {
   },
   getRun(id: string): Promise<ApiRun> {
     return request(`/runs/${id}`);
+  },
+  getRunExplanation(id: string): Promise<RunExplanation> {
+    return request(`/runs/${id}/explanation`);
   },
   listExperiments(): Promise<ApiExperiment[]> {
     return request("/experiments");
