@@ -16,3 +16,5 @@ The current container stack uses persistent SQLite storage for a simple local de
 - Frontend: `cd project/frontend`, run `npm ci` then `npm run dev`.
 
 The CI workflow runs backend tests/compilation and frontend lint/build on every push and pull request.
+
+See [architecture](docs/ARCHITECTURE.md), [API reference](docs/API.md), and the [validation plan](docs/VALIDATION.md) for the final-project documentation.
